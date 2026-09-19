@@ -20,6 +20,7 @@ type Client struct {
 	header       http.Header
 	httpClient   *http.Client
 	logger       *slog.Logger
+	logBodies    bool
 	requests     atomic.Uint64
 
 	// Models lists the models available to the account.
@@ -75,6 +76,13 @@ func WithHTTPClient(httpClient *http.Client) ClientOption {
 // at debug. Credential headers are redacted; bodies are not.
 func WithLogger(logger *slog.Logger) ClientOption {
 	return func(c *Client) { c.logger = logger }
+}
+
+// WithUnsafeDebugBodyLogging includes request and response bodies in debug logs.
+// It is intended only for local troubleshooting because state can contain
+// sensitive user data.
+func WithUnsafeDebugBodyLogging() ClientOption {
+	return func(c *Client) { c.logBodies = true }
 }
 
 // New creates a client for the TypeSafe AI API.

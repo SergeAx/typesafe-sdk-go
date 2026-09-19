@@ -16,8 +16,7 @@ type Question interface {
 // come back under.
 type Questions map[string]Question
 
-// Validate reports the problems the API would reject: no questions at all, a
-// score question without a rubric, or a raw question without a type.
+// Validate reports the problems the API would reject before sending a request.
 func (q Questions) Validate() error {
 	if len(q) == 0 {
 		return newError("at least one question is required")
@@ -36,7 +35,7 @@ func (q Questions) Validate() error {
 // Noul is a yes/no question or statement, answered with the probability that
 // the answer is yes. See https://docs.typesafe.ai/primitives/noul.
 type Noul struct {
-	// Instructions is the question or statement to evaluate.
+	// Instructions is the required question or statement to evaluate.
 	Instructions Content
 	// Criteria optionally says what counts as a yes and as a no.
 	Criteria *NoulCriteria
@@ -70,15 +69,20 @@ func (c NoulCriteria) MarshalJSON() ([]byte, error) {
 	return json.Marshal(payload)
 }
 
-func (q Noul) validate(string) error { return nil }
+func (q Noul) validate(name string) error {
+	if q.Instructions == nil {
+		return newError("noul question %q needs instructions", name)
+	}
+	return nil
+}
 
 // Choice is a question that selects one of the labels in its criteria.
 // See https://docs.typesafe.ai/primitives/choice.
 type Choice struct {
-	// Instructions is what the model should decide.
+	// Instructions is the required decision the model should make.
 	Instructions Content
 	// Criteria maps each label to a description of when it applies, or to nil
-	// to let the label speak for itself.
+	// to let the label speak for itself. At least one label is required.
 	Criteria map[string]Content
 }
 
@@ -94,15 +98,24 @@ func (q Choice) MarshalJSON() ([]byte, error) {
 	return json.Marshal(payload)
 }
 
-func (q Choice) validate(string) error { return nil }
+func (q Choice) validate(name string) error {
+	if q.Instructions == nil {
+		return newError("choice question %q needs instructions", name)
+	}
+	if len(q.Criteria) == 0 {
+		return newError("choice question %q needs at least one criterion", name)
+	}
+	return nil
+}
 
 // Score is a question that rates the state against an ordered rubric, scoring
 // each criterion by its position from zero.
 // See https://docs.typesafe.ai/primitives/score.
 type Score struct {
-	// Instructions is what the model should rate.
+	// Instructions is the required dimension the model should rate.
 	Instructions Content
 	// Criteria describes the score levels in order, starting at zero.
+	// It must contain at least two levels.
 	Criteria []Content
 }
 
@@ -119,8 +132,11 @@ func (q Score) MarshalJSON() ([]byte, error) {
 }
 
 func (q Score) validate(name string) error {
-	if len(q.Criteria) == 0 {
-		return newError("score question %q has no criteria; at least one score level is required", name)
+	if q.Instructions == nil {
+		return newError("score question %q needs instructions", name)
+	}
+	if len(q.Criteria) < 2 {
+		return newError("score question %q needs at least two score levels", name)
 	}
 	return nil
 }

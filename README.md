@@ -85,8 +85,8 @@ result.Scores()["urgency"].Score     // expected score, may fall between levels
 
 `Instructions` and every criterion take a string, a `map[string]any`, a
 `[]any`, or `nil`. Answers of a type this SDK version does not model are
-dropped with a warning, so a newer API never breaks an older client; reach the
-raw payload through `result.HTTPResponse`.
+dropped with a warning, so a newer API never breaks an older client. The raw
+payload remains available through `result.RawBody`.
 
 ## Configuration
 
@@ -102,6 +102,7 @@ the SDK defaults. Empty or whitespace-only environment values are ignored.
 | `WithTimeout` | — | 10s per attempt |
 | `WithRetry` | — | see below |
 | `WithHeader`, `WithHTTPClient` | — | — |
+| `WithUnsafeDebugBodyLogging` | — | `false` |
 
 Per-call overrides: `WithModel`, `WithRequestTimeout`, `WithRequestRetry`,
 `WithRequestHeader`, `WithExtraBody`.
@@ -157,10 +158,11 @@ case errors.Is(err, context.Canceled):
 
 ## Logging
 
-The SDK logs through `log/slog`: request summaries at info, headers and bodies
-at debug. Credential headers are redacted; bodies are not. Set
+The SDK logs through `log/slog`: request summaries at info and headers at
+debug. It omits request and response bodies at every log level by default. Set
 `TYPESAFE_LOG_LEVEL` (`debug`, `info`, `warn`, `error`, `off`), or pass your own
-logger with `WithLogger`.
+logger with `WithLogger`. Use `WithUnsafeDebugBodyLogging` only for local
+troubleshooting, because state and responses can contain sensitive data.
 
 ## Documentation
 

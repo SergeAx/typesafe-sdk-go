@@ -64,6 +64,9 @@ type SystemOneResponse struct {
 	// not model are dropped, with a warning.
 	Answers map[string]Answer
 	Usage   Usage
+	// RawBody is a copy of the response body used to decode this result. It is
+	// useful when a newer API returns an answer type this SDK does not yet model.
+	RawBody json.RawMessage
 	// RequestID is the x-typesafe-request-id response header, empty when absent.
 	RequestID string
 	// HTTPResponse is the response the answers were read from, with its body
@@ -156,6 +159,7 @@ func (r *response) decodeSystemOne() (*SystemOneResponse, error) {
 	result := &SystemOneResponse{
 		Model:        *wire.Model,
 		Answers:      answers,
+		RawBody:      append(json.RawMessage(nil), r.body...),
 		RequestID:    r.requestID,
 		HTTPResponse: r.http,
 	}

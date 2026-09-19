@@ -33,7 +33,11 @@ func (c *Client) send(ctx context.Context, method, path string, payload any, o *
 			attemptHeader = header.Clone()
 			attemptHeader.Set(retryCountHeader, strconv.Itoa(attempt))
 		}
-		c.logger.Debug(tag+" request", "url", url, "headers", redactHeader(attemptHeader), "body", string(body))
+		if c.logBodies {
+			c.logger.Debug(tag+" request", "url", url, "headers", redactHeader(attemptHeader), "body", string(body))
+		} else {
+			c.logger.Debug(tag+" request", "url", url, "headers", redactHeader(attemptHeader), "body_omitted", true)
+		}
 
 		started := time.Now()
 		resp, raw, err := c.attempt(ctx, method, url, body, attemptHeader, o.timeout)
@@ -50,7 +54,11 @@ func (c *Client) send(ctx context.Context, method, path string, payload any, o *
 
 		requestID := resp.Header.Get(requestIDHeader)
 		c.logger.Info(tag+" response", "status", resp.StatusCode, "in", time.Since(started), "request_id", requestID)
-		c.logger.Debug(tag+" body", "headers", redactHeader(resp.Header), "body", string(raw))
+		if c.logBodies {
+			c.logger.Debug(tag+" response body", "headers", redactHeader(resp.Header), "body", string(raw))
+		} else {
+			c.logger.Debug(tag+" response body", "headers", redactHeader(resp.Header), "body_omitted", true)
+		}
 
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 			return &response{http: resp, body: raw, endpoint: endpoint, requestID: requestID, logger: c.logger}, nil

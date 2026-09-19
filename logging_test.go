@@ -67,7 +67,7 @@ func TestDebugLoggingRedactsCredentials(t *testing.T) {
 		writeJSON(t, w, http.StatusOK, `{"model":"jev-1","usage":{},"answers":{"a":{"type":"noul","noul":0.4}}}`)
 	}, WithLogger(logger))
 
-	if _, err := client.SystemOne(context.Background(), "state", Questions{"a": Noul{}}); err != nil {
+	if _, err := client.SystemOne(context.Background(), "sensitive state", Questions{"a": Noul{Instructions: "Is this relevant?"}}); err != nil {
 		t.Fatalf("SystemOne() error = %v", err)
 	}
 
@@ -77,6 +77,26 @@ func TestDebugLoggingRedactsCredentials(t *testing.T) {
 	}
 	if !strings.Contains(output, "Bearer ***") {
 		t.Errorf("debug logs did not show a redacted credential, got:\n%s", output)
+	}
+	if strings.Contains(output, "sensitive state") {
+		t.Errorf("debug logs leaked request state, got:\n%s", output)
+	}
+}
+
+func TestUnsafeDebugBodyLoggingIsOptIn(t *testing.T) {
+	var logged bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logged, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(t, w, http.StatusOK, `{"model":"jev-1","usage":{},"answers":{"a":{"type":"noul","noul":0.4}}}`)
+	}, WithLogger(logger), WithUnsafeDebugBodyLogging())
+
+	if _, err := client.SystemOne(context.Background(), "sensitive state", Questions{"a": Noul{Instructions: "Is this relevant?"}}); err != nil {
+		t.Fatalf("SystemOne() error = %v", err)
+	}
+
+	if !strings.Contains(logged.String(), "sensitive state") {
+		t.Errorf("unsafe debug logging did not include the request body, got:\n%s", logged.String())
 	}
 }
 
