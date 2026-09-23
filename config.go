@@ -47,13 +47,3 @@ var runtimeDescription = fmt.Sprintf("go/%s (%s; %s)",
 func env(name string) string {
 	return strings.TrimSpace(os.Getenv(name))
 }
-
-func fromCodeOrEnv(value, name, fallback string) string {
-	if value != "" {
-		return value
-	}
-	if fromEnv := env(name); fromEnv != "" {
-		return fromEnv
-	}
-	return fallback
-}

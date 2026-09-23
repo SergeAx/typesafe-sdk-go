@@ -1,6 +1,7 @@
 package typesafe
 
 import (
+	"cmp"
 	"context"
 	"log/slog"
 	"net/http"
@@ -87,15 +88,15 @@ func New(options ...ClientOption) (*Client, error) {
 		option(client)
 	}
 
-	client.apiKey = fromCodeOrEnv(client.apiKey, APIKeyEnv, "")
+	client.apiKey = cmp.Or(client.apiKey, env(APIKeyEnv))
 	if client.apiKey == "" {
 		return nil, newError("no API key was provided; pass WithAPIKey or set the %s environment variable", APIKeyEnv)
 	}
-	client.baseURL = strings.TrimRight(fromCodeOrEnv(client.baseURL, BaseURLEnv, DefaultBaseURL), "/")
+	client.baseURL = strings.TrimRight(cmp.Or(client.baseURL, env(BaseURLEnv), DefaultBaseURL), "/")
 	if client.baseURL == "" {
 		return nil, newError("the base URL must not be empty")
 	}
-	client.defaultModel = fromCodeOrEnv(client.defaultModel, DefaultModelEnv, DefaultModel)
+	client.defaultModel = cmp.Or(client.defaultModel, env(DefaultModelEnv), DefaultModel)
 
 	if client.timeout == 0 {
 		client.timeout = DefaultTimeout
@@ -212,10 +213,7 @@ func (c *Client) SystemOne(ctx context.Context, state Content, questions Questio
 		return nil, err
 	}
 
-	model := resolved.model
-	if model == "" {
-		model = c.defaultModel
-	}
+	model := cmp.Or(resolved.model, c.defaultModel)
 	body := map[string]any{"state": state, "model": model, "questions": questions}
 	for name, value := range resolved.extraBody {
 		body[name] = value
