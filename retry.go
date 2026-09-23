@@ -145,19 +145,12 @@ func (p RetryPolicy) backoff(attempt int) time.Duration {
 // parseRetryAfter reads retry-after-ms, then Retry-After as either seconds or an
 // HTTP date.
 func parseRetryAfter(header http.Header, now time.Time) (time.Duration, bool) {
-	if raw := strings.TrimSpace(header.Get("Retry-After-Ms")); raw != "" {
-		if ms, err := strconv.ParseFloat(raw, 64); err == nil {
-			if delay, ok := durationOf(ms, time.Millisecond); ok {
-				return delay, true
-			}
-		}
+	if delay, ok := parseDelay(header.Get("Retry-After-Ms"), time.Millisecond); ok {
+		return delay, true
 	}
 	raw := strings.TrimSpace(header.Get("Retry-After"))
-	if raw == "" {
-		return 0, false
-	}
-	if seconds, err := strconv.ParseFloat(raw, 64); err == nil {
-		return durationOf(seconds, time.Second)
+	if delay, ok := parseDelay(raw, time.Second); ok {
+		return delay, true
 	}
 	if at, err := http.ParseTime(raw); err == nil {
 		return max(0, at.Sub(now)), true
@@ -165,12 +158,13 @@ func parseRetryAfter(header http.Header, now time.Time) (time.Duration, bool) {
 	return 0, false
 }
 
-// durationOf rejects a count of units that is negative, NaN, or too long for a
-// Duration: Go leaves an out-of-range float conversion to the platform, and on
-// amd64 it comes out negative.
-func durationOf(count float64, unit time.Duration) (time.Duration, bool) {
+// parseDelay reads a count of units, rejecting one that is negative, NaN, or
+// too long for a Duration: Go leaves an out-of-range float conversion to the
+// platform, and on amd64 it comes out negative.
+func parseDelay(raw string, unit time.Duration) (time.Duration, bool) {
+	count, err := strconv.ParseFloat(strings.TrimSpace(raw), 64)
 	ns := count * float64(unit)
-	if !(ns >= 0 && ns < math.MaxInt64) {
+	if err != nil || !(ns >= 0 && ns < math.MaxInt64) {
 		return 0, false
 	}
 	return time.Duration(ns), true
