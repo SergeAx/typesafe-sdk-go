@@ -13,8 +13,8 @@ func TestNewRequiresAPIKey(t *testing.T) {
 
 	_, err := New()
 
-	var sdkErr *Error
-	if !errors.As(err, &sdkErr) {
+	sdkErr, ok := errors.AsType[*Error](err)
+	if !ok {
 		t.Fatalf("New() error = %v (%T), want *typesafe.Error", err, err)
 	}
 	if got := sdkErr.Error(); got == "" || !strings.Contains(got, APIKeyEnv) {
@@ -113,8 +113,7 @@ func TestNewRejectsInvalidConfiguration(t *testing.T) {
 
 			_, err := New(append([]ClientOption{WithAPIKey("key")}, test.options...)...)
 
-			var sdkErr *Error
-			if !errors.As(err, &sdkErr) {
+			if _, ok := errors.AsType[*Error](err); !ok {
 				t.Fatalf("New() error = %v (%T), want *typesafe.Error", err, err)
 			}
 		})

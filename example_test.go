@@ -76,8 +76,7 @@ func ExampleAPIError() {
 	switch {
 	case err == nil:
 	case errors.Is(err, typesafe.ErrRateLimit):
-		var apiErr *typesafe.APIError
-		errors.As(err, &apiErr)
+		apiErr, _ := errors.AsType[*typesafe.APIError](err)
 		if delay, ok := apiErr.RetryAfter(); ok {
 			fmt.Printf("rate limited, retry in %s\n", delay)
 		}

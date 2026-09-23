@@ -48,9 +48,9 @@ func newError(format string, args ...any) *Error {
 	return &Error{Message: fmt.Sprintf(format, args...)}
 }
 
-// APIError is an unsuccessful HTTP response from the API. Use [errors.As] to
-// reach the status and body, and [errors.Is] with one of the category sentinels
-// to test for a specific failure.
+// APIError is an unsuccessful HTTP response from the API. Use [errors.AsType]
+// to reach the status and body, and [errors.Is] with one of the category
+// sentinels to test for a specific failure.
 type APIError struct {
 	// Status is the HTTP response status code.
 	Status int

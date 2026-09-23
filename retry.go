@@ -103,12 +103,10 @@ func (p RetryPolicy) retriesStatus(status int) bool {
 }
 
 func (p RetryPolicy) retriesError(err error) bool {
-	var timeout *TimeoutError
-	if errors.As(err, &timeout) {
+	if _, ok := errors.AsType[*TimeoutError](err); ok {
 		return p.RetryTimeoutErrors
 	}
-	var connection *ConnectionError
-	if errors.As(err, &connection) {
+	if _, ok := errors.AsType[*ConnectionError](err); ok {
 		return p.RetryConnectionErrors
 	}
 	return false

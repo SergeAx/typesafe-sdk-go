@@ -120,8 +120,7 @@ func TestQuestionsValidate(t *testing.T) {
 			if (err != nil) != test.wantErr {
 				t.Fatalf("Validate() error = %v, wantErr = %v", err, test.wantErr)
 			}
-			var sdkErr *Error
-			if err != nil && !errors.As(err, &sdkErr) {
+			if _, ok := errors.AsType[*Error](err); err != nil && !ok {
 				t.Errorf("Validate() error = %T, want *typesafe.Error", err)
 			}
 		})

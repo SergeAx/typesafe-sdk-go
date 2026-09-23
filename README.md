@@ -133,8 +133,7 @@ as a whole, backoff included.
 result, err := client.SystemOne(ctx, state, questions)
 switch {
 case errors.Is(err, typesafe.ErrRateLimit):
-	var apiErr *typesafe.APIError
-	errors.As(err, &apiErr)
+	apiErr, _ := errors.AsType[*typesafe.APIError](err)
 	delay, ok := apiErr.RetryAfter()
 case errors.Is(err, typesafe.ErrTimeout):
 	// the attempt exceeded its timeout

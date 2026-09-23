@@ -187,8 +187,8 @@ func TestSystemOneReturnsTheLastErrorWhenRetriesRunOut(t *testing.T) {
 
 	_, err := client.SystemOne(context.Background(), "state", Questions{"a": Noul{}})
 
-	var apiErr *APIError
-	if !errors.As(err, &apiErr) {
+	apiErr, ok := errors.AsType[*APIError](err)
+	if !ok {
 		t.Fatalf("SystemOne() error = %v (%T), want *APIError", err, err)
 	}
 	if apiErr.Status != http.StatusServiceUnavailable || apiErr.Message != "still down" {
@@ -274,8 +274,8 @@ func TestSystemOneTimesOutPerAttempt(t *testing.T) {
 
 	_, err := client.SystemOne(context.Background(), "state", Questions{"a": Noul{}})
 
-	var timeout *TimeoutError
-	if !errors.As(err, &timeout) {
+	timeout, ok := errors.AsType[*TimeoutError](err)
+	if !ok {
 		t.Fatalf("SystemOne() error = %v (%T), want *TimeoutError", err, err)
 	}
 	if timeout.Timeout != 30*time.Millisecond {
@@ -302,8 +302,7 @@ func TestSystemOneStopsWhenTheContextIsCanceled(t *testing.T) {
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("SystemOne() error = %v, want it to match context.Canceled", err)
 	}
-	var timeout *TimeoutError
-	if errors.As(err, &timeout) {
+	if _, ok := errors.AsType[*TimeoutError](err); ok {
 		t.Error("a caller cancellation was reported as a timeout")
 	}
 }
@@ -319,8 +318,8 @@ func TestSystemOneReportsNonJSONErrorBodies(t *testing.T) {
 
 	_, err := client.SystemOne(context.Background(), "state", Questions{"a": Noul{}})
 
-	var apiErr *APIError
-	if !errors.As(err, &apiErr) {
+	apiErr, ok := errors.AsType[*APIError](err)
+	if !ok {
 		t.Fatalf("SystemOne() error = %v (%T), want *APIError", err, err)
 	}
 	if apiErr.Body != "<html>502 Bad Gateway</html>" {
@@ -354,8 +353,8 @@ func TestModelsListRejectsAnUnexpectedShape(t *testing.T) {
 
 	_, err := client.Models.List(context.Background())
 
-	var invalid *ResponseValidationError
-	if !errors.As(err, &invalid) {
+	invalid, ok := errors.AsType[*ResponseValidationError](err)
+	if !ok {
 		t.Fatalf("Models.List() error = %v (%T), want *ResponseValidationError", err, err)
 	}
 	if invalid.Field != "models" {

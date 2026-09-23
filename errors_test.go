@@ -121,9 +121,8 @@ func TestTimeoutErrorMatchesConnection(t *testing.T) {
 			t.Errorf("errors.Is(TimeoutError, %v) = false, want true", target)
 		}
 	}
-	var timeout *TimeoutError
-	if !errors.As(err, &timeout) || timeout.Timeout != 2*time.Second {
-		t.Errorf("errors.As() did not recover the timeout, got %v", timeout)
+	if timeout, ok := errors.AsType[*TimeoutError](err); !ok || timeout.Timeout != 2*time.Second {
+		t.Errorf("errors.AsType() did not recover the timeout, got %v", timeout)
 	}
 }
 

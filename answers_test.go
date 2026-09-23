@@ -180,8 +180,8 @@ func TestDecodeSystemOneRejectsMissingFields(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			_, err := testResponse(test.body).decodeSystemOne()
 
-			var invalid *ResponseValidationError
-			if !errors.As(err, &invalid) {
+			invalid, ok := errors.AsType[*ResponseValidationError](err)
+			if !ok {
 				t.Fatalf("decodeSystemOne() error = %v (%T), want *ResponseValidationError", err, err)
 			}
 			if invalid.Field != test.wantField {

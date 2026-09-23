@@ -69,8 +69,7 @@ func run() error {
 		},
 	})
 	if err != nil {
-		var apiErr *typesafe.APIError
-		if errors.As(err, &apiErr) && apiErr.RequestID != "" {
+		if apiErr, ok := errors.AsType[*typesafe.APIError](err); ok && apiErr.RequestID != "" {
 			return fmt.Errorf("%w — quote request %s to support", err, apiErr.RequestID)
 		}
 		return err
