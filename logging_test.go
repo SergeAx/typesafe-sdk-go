@@ -2,7 +2,6 @@ package typesafe
 
 import (
 	"bytes"
-	"context"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -67,7 +66,7 @@ func TestDebugLoggingRedactsCredentials(t *testing.T) {
 		writeJSON(t, w, http.StatusOK, `{"model":"jev-1","usage":{},"answers":{"a":{"type":"noul","noul":0.4}}}`)
 	}, WithLogger(logger))
 
-	if _, err := client.SystemOne(context.Background(), "state", Questions{"a": Noul{}}); err != nil {
+	if _, err := client.SystemOne(t.Context(), "state", Questions{"a": Noul{}}); err != nil {
 		t.Fatalf("SystemOne() error = %v", err)
 	}
 
@@ -88,7 +87,7 @@ func TestDefaultLoggerReadsTheEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("defaultLogger() error = %v", err)
 	}
-	if !logger.Enabled(context.Background(), slog.LevelDebug) {
+	if !logger.Enabled(t.Context(), slog.LevelDebug) {
 		t.Error("defaultLogger() ignored TYPESAFE_LOG_LEVEL=debug")
 	}
 
@@ -97,7 +96,7 @@ func TestDefaultLoggerReadsTheEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("defaultLogger() error = %v", err)
 	}
-	if logger.Enabled(context.Background(), slog.LevelError) {
+	if logger.Enabled(t.Context(), slog.LevelError) {
 		t.Error("defaultLogger() still logged with TYPESAFE_LOG_LEVEL=off")
 	}
 }

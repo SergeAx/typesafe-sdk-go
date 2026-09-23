@@ -66,7 +66,7 @@ func TestSystemOneSendsAWellFormedRequest(t *testing.T) {
 		writeJSON(t, w, http.StatusOK, `{"model":"jev-1","usage":{},"answers":{"billing":{"type":"noul","noul":0.9}}}`)
 	})
 
-	result, err := client.SystemOne(context.Background(), "I was charged twice.", Questions{
+	result, err := client.SystemOne(t.Context(), "I was charged twice.", Questions{
 		"billing": Noul{Instructions: "Is this about billing?"},
 	})
 	if err != nil {
@@ -117,7 +117,7 @@ func TestSystemOneModelAndExtraBodyOverrides(t *testing.T) {
 		writeJSON(t, w, http.StatusOK, `{"model":"jev-1","usage":{},"answers":{"a":{"type":"noul","noul":0.1}}}`)
 	})
 
-	_, err := client.SystemOne(context.Background(), "state", Questions{"a": Noul{}},
+	_, err := client.SystemOne(t.Context(), "state", Questions{"a": Noul{}},
 		WithModel("jev-mini"),
 		WithExtraBody(map[string]any{"trace_id": "t-1", "state": "replaced"}),
 	)
@@ -143,7 +143,7 @@ func TestSystemOneValidatesBeforeSending(t *testing.T) {
 		writeJSON(t, w, http.StatusOK, `{}`)
 	})
 
-	if _, err := client.SystemOne(context.Background(), "state", Questions{}); err == nil {
+	if _, err := client.SystemOne(t.Context(), "state", Questions{}); err == nil {
 		t.Error("SystemOne() accepted an empty question set, want an error")
 	}
 	if called.Load() {
@@ -163,7 +163,7 @@ func TestSystemOneRetriesServerErrors(t *testing.T) {
 		writeJSON(t, w, http.StatusOK, `{"model":"jev-1","usage":{},"answers":{"a":{"type":"noul","noul":0.4}}}`)
 	})
 
-	result, err := client.SystemOne(context.Background(), "state", Questions{"a": Noul{}})
+	result, err := client.SystemOne(t.Context(), "state", Questions{"a": Noul{}})
 	if err != nil {
 		t.Fatalf("SystemOne() error = %v", err)
 	}
@@ -185,7 +185,7 @@ func TestSystemOneReturnsTheLastErrorWhenRetriesRunOut(t *testing.T) {
 		writeJSON(t, w, http.StatusServiceUnavailable, `{"error":"still down"}`)
 	})
 
-	_, err := client.SystemOne(context.Background(), "state", Questions{"a": Noul{}})
+	_, err := client.SystemOne(t.Context(), "state", Questions{"a": Noul{}})
 
 	apiErr, ok := errors.AsType[*APIError](err)
 	if !ok {
@@ -209,7 +209,7 @@ func TestSystemOneDoesNotRetryClientErrors(t *testing.T) {
 		writeJSON(t, w, http.StatusUnauthorized, `{"error":"Invalid API key"}`)
 	})
 
-	_, err := client.SystemOne(context.Background(), "state", Questions{"a": Noul{}})
+	_, err := client.SystemOne(t.Context(), "state", Questions{"a": Noul{}})
 
 	if !errors.Is(err, ErrAuthentication) {
 		t.Fatalf("SystemOne() error = %v, want an authentication failure", err)
@@ -231,7 +231,7 @@ func TestSystemOneHonorsRetryAfter(t *testing.T) {
 	})
 
 	started := time.Now()
-	if _, err := client.SystemOne(context.Background(), "state", Questions{"a": Noul{}}); err != nil {
+	if _, err := client.SystemOne(t.Context(), "state", Questions{"a": Noul{}}); err != nil {
 		t.Fatalf("SystemOne() error = %v", err)
 	}
 
@@ -259,7 +259,7 @@ func TestSystemOneRetriesConnectionErrors(t *testing.T) {
 		writeJSON(t, w, http.StatusOK, `{"model":"jev-1","usage":{},"answers":{"a":{"type":"noul","noul":0.4}}}`)
 	})
 
-	if _, err := client.SystemOne(context.Background(), "state", Questions{"a": Noul{}}); err != nil {
+	if _, err := client.SystemOne(t.Context(), "state", Questions{"a": Noul{}}); err != nil {
 		t.Fatalf("SystemOne() error = %v, want the dropped connection to be retried", err)
 	}
 	if got := attempts.Load(); got != 2 {
@@ -272,7 +272,7 @@ func TestSystemOneTimesOutPerAttempt(t *testing.T) {
 		stall(r)
 	}, WithTimeout(30*time.Millisecond), WithRetry(RetryPolicy{}))
 
-	_, err := client.SystemOne(context.Background(), "state", Questions{"a": Noul{}})
+	_, err := client.SystemOne(t.Context(), "state", Questions{"a": Noul{}})
 
 	timeout, ok := errors.AsType[*TimeoutError](err)
 	if !ok {
@@ -291,7 +291,7 @@ func TestSystemOneStopsWhenTheContextIsCanceled(t *testing.T) {
 		stall(r)
 	})
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	go func() {
 		time.Sleep(20 * time.Millisecond)
 		cancel()
@@ -316,7 +316,7 @@ func TestSystemOneReportsNonJSONErrorBodies(t *testing.T) {
 		}
 	}, WithRetry(RetryPolicy{}))
 
-	_, err := client.SystemOne(context.Background(), "state", Questions{"a": Noul{}})
+	_, err := client.SystemOne(t.Context(), "state", Questions{"a": Noul{}})
 
 	apiErr, ok := errors.AsType[*APIError](err)
 	if !ok {
@@ -336,7 +336,7 @@ func TestModelsList(t *testing.T) {
 			`{"models":[{"name":"jev-latest","description":"General-purpose system one model.","release_date":"2026-09-15"}]}`)
 	})
 
-	models, err := client.Models.List(context.Background())
+	models, err := client.Models.List(t.Context())
 	if err != nil {
 		t.Fatalf("Models.List() error = %v", err)
 	}
@@ -351,7 +351,7 @@ func TestModelsListRejectsAnUnexpectedShape(t *testing.T) {
 		writeJSON(t, w, http.StatusOK, `{"data":[]}`)
 	})
 
-	_, err := client.Models.List(context.Background())
+	_, err := client.Models.List(t.Context())
 
 	invalid, ok := errors.AsType[*ResponseValidationError](err)
 	if !ok {

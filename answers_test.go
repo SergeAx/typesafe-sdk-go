@@ -2,7 +2,6 @@ package typesafe
 
 import (
 	"errors"
-	"io"
 	"log/slog"
 	"net/http"
 	"reflect"
@@ -15,7 +14,7 @@ func testResponse(body string) *response {
 		body:      []byte(body),
 		endpoint:  "POST https://api.typesafe.ai/v1/systemone",
 		requestID: "req_123",
-		logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
+		logger:    slog.New(slog.DiscardHandler),
 	}
 }
 
