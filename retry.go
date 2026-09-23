@@ -3,7 +3,7 @@ package typesafe
 import (
 	"errors"
 	"math"
-	"math/rand"
+	"math/rand/v2"
 	"net/http"
 	"strconv"
 	"strings"
