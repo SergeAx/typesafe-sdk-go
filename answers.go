@@ -112,22 +112,69 @@ type ModelMetadata struct {
 	ReleaseDate string `json:"release_date"`
 }
 
-// Pointer fields distinguish a missing value from a zero one, so a response
-// that omits a required field is reported rather than silently defaulted.
+// Required fields are pointers or maps, which stay nil when the response omits
+// a field or sets it to null, so a missing value is reported rather than
+// silently defaulted.
 type systemOneWire struct {
 	Model   *string                    `json:"model"`
 	Usage   *Usage                     `json:"usage"`
 	Answers map[string]json.RawMessage `json:"answers"`
 }
 
-type answerWire struct {
-	Type          *string         `json:"type"`
-	Noul          *float64        `json:"noul"`
-	Choice        *string         `json:"choice"`
+// answerWire is the wire form of one answer type. answer returns the decoded
+// answer, or the name of the first required field the response left out.
+type answerWire interface {
+	answer() (Answer, string)
+}
+
+type noulWire struct {
+	Noul *float64 `json:"noul"`
+}
+
+func (w *noulWire) answer() (Answer, string) {
+	if w.Noul == nil {
+		return nil, "noul"
+	}
+	return &NoulAnswer{Noul: *w.Noul}, ""
+}
+
+type choiceWire struct {
+	Choice        *string            `json:"choice"`
+	Confidence    *float64           `json:"confidence"`
+	Probabilities map[string]float64 `json:"probabilities"`
+}
+
+func (w *choiceWire) answer() (Answer, string) {
+	switch {
+	case w.Choice == nil:
+		return nil, "choice"
+	case w.Confidence == nil:
+		return nil, "confidence"
+	case w.Probabilities == nil:
+		return nil, "probabilities"
+	}
+	return &ChoiceAnswer{Choice: *w.Choice, Confidence: *w.Confidence, Probabilities: w.Probabilities}, ""
+}
+
+type scoreWire struct {
 	Score         *float64        `json:"score"`
 	Confidence    *float64        `json:"confidence"`
 	Legend        map[int]Content `json:"legend"`
-	Probabilities json.RawMessage `json:"probabilities"`
+	Probabilities map[int]float64 `json:"probabilities"`
+}
+
+func (w *scoreWire) answer() (Answer, string) {
+	switch {
+	case w.Score == nil:
+		return nil, "score"
+	case w.Confidence == nil:
+		return nil, "confidence"
+	case w.Legend == nil:
+		return nil, "legend"
+	case w.Probabilities == nil:
+		return nil, "probabilities"
+	}
+	return &ScoreAnswer{Score: *w.Score, Confidence: *w.Confidence, Legend: w.Legend, Probabilities: w.Probabilities}, ""
 }
 
 func (r *response) decodeSystemOne() (*SystemOneResponse, error) {
@@ -166,67 +213,39 @@ func (r *response) decodeSystemOne() (*SystemOneResponse, error) {
 }
 
 func (r *response) decodeAnswer(name string, raw json.RawMessage) (Answer, error) {
+	path := "answers." + name
+	var head struct {
+		Type *string `json:"type"`
+	}
+	if err := r.unmarshal(path, raw, &head); err != nil {
+		return nil, err
+	}
+	if head.Type == nil {
+		return nil, r.invalid(path+".type", nil)
+	}
+
 	var wire answerWire
-	if err := json.Unmarshal(raw, &wire); err != nil {
-		return nil, r.invalid("answers."+name, err)
-	}
-	if wire.Type == nil {
-		return nil, r.invalid("answers."+name+".type", nil)
-	}
-
-	field := func(leaf string) string { return "answers." + name + "." + leaf }
-	switch *wire.Type {
+	switch *head.Type {
 	case "noul":
-		if wire.Noul == nil {
-			return nil, r.invalid(field("noul"), nil)
-		}
-		return &NoulAnswer{Noul: *wire.Noul}, nil
-
+		wire = &noulWire{}
 	case "choice":
-		if wire.Choice == nil {
-			return nil, r.invalid(field("choice"), nil)
-		}
-		if wire.Confidence == nil {
-			return nil, r.invalid(field("confidence"), nil)
-		}
-		probabilities := map[string]float64{}
-		if err := decodeProbabilities(wire.Probabilities, &probabilities); err != nil {
-			return nil, r.invalid(field("probabilities"), err)
-		}
-		return &ChoiceAnswer{Choice: *wire.Choice, Confidence: *wire.Confidence, Probabilities: probabilities}, nil
-
+		wire = &choiceWire{}
 	case "score":
-		if wire.Score == nil {
-			return nil, r.invalid(field("score"), nil)
-		}
-		if wire.Confidence == nil {
-			return nil, r.invalid(field("confidence"), nil)
-		}
-		if wire.Legend == nil {
-			return nil, r.invalid(field("legend"), nil)
-		}
-		probabilities := map[int]float64{}
-		if err := decodeProbabilities(wire.Probabilities, &probabilities); err != nil {
-			return nil, r.invalid(field("probabilities"), err)
-		}
-		return &ScoreAnswer{
-			Score:         *wire.Score,
-			Confidence:    *wire.Confidence,
-			Legend:        wire.Legend,
-			Probabilities: probabilities,
-		}, nil
+		wire = &scoreWire{}
+	default:
+		// Forward compatibility: a newer API may answer with a type this
+		// version does not know. The raw payload stays reachable through
+		// HTTPResponse.
+		r.logger.Warn("ignoring answer of unrecognized type",
+			"answer", name, "type", *head.Type, "request_id", r.requestID)
+		return nil, nil
 	}
-
-	// Forward compatibility: a newer API may answer with a type this version
-	// does not know. The raw payload stays reachable through HTTPResponse.
-	r.logger.Warn("ignoring answer of unrecognized type",
-		"answer", name, "type", *wire.Type, "request_id", r.requestID)
-	return nil, nil
-}
-
-func decodeProbabilities[K comparable](raw json.RawMessage, into *map[K]float64) error {
-	if len(raw) == 0 || string(raw) == "null" {
-		return newError("field is missing")
+	if err := r.unmarshal(path, raw, wire); err != nil {
+		return nil, err
 	}
-	return json.Unmarshal(raw, into)
+	answer, missing := wire.answer()
+	if missing != "" {
+		return nil, r.invalid(path+"."+missing, nil)
+	}
+	return answer, nil
 }

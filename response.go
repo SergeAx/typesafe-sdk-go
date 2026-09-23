@@ -1,6 +1,8 @@
 package typesafe
 
 import (
+	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 )
@@ -25,4 +27,17 @@ func (r *response) invalid(field string, err error) *ResponseValidationError {
 		Endpoint:  r.endpoint,
 		Err:       err,
 	}
+}
+
+// unmarshal decodes the value found at path, reporting a mistyped one at the
+// field it sits in.
+func (r *response) unmarshal(path string, raw []byte, into any) error {
+	err := json.Unmarshal(raw, into)
+	if err == nil {
+		return nil
+	}
+	if typeErr, ok := errors.AsType[*json.UnmarshalTypeError](err); ok && typeErr.Field != "" {
+		path += "." + typeErr.Field
+	}
+	return r.invalid(path, err)
 }
