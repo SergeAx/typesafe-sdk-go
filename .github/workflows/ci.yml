@@ -40,6 +40,6 @@ jobs:
             exit 1
           fi
       # Pinned: a new linter release must not fail CI on an untouched commit.
-      - uses: golangci/golangci-lint-action@v6
+      - uses: golangci/golangci-lint-action@v9
         with:
-          version: v1.64.8
+          version: v2.13.2
