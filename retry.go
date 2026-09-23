@@ -95,14 +95,13 @@ func (p RetryPolicy) validate() error {
 	return nil
 }
 
-func (p RetryPolicy) retriesStatus(status int) bool {
-	if p.RetryStatus == nil {
-		return DefaultRetryStatus(status)
+func (p RetryPolicy) retries(err error) bool {
+	if apiErr, ok := errors.AsType[*APIError](err); ok {
+		if p.RetryStatus == nil {
+			return DefaultRetryStatus(apiErr.Status)
+		}
+		return p.RetryStatus(apiErr.Status)
 	}
-	return p.RetryStatus(status)
-}
-
-func (p RetryPolicy) retriesError(err error) bool {
 	if _, ok := errors.AsType[*TimeoutError](err); ok {
 		return p.RetryTimeoutErrors
 	}
@@ -113,10 +112,11 @@ func (p RetryPolicy) retriesError(err error) bool {
 }
 
 // delay returns how long to wait before the retry following a zero-based
-// attempt, preferring a server-requested delay within MaxRetryAfter.
-func (p RetryPolicy) delay(attempt int, header http.Header, now time.Time) time.Duration {
-	if p.RespectRetryAfter && header != nil {
-		if requested, ok := parseRetryAfter(header, now); ok && requested <= p.MaxRetryAfter {
+// attempt that failed with err, preferring a delay the server asked for within
+// MaxRetryAfter.
+func (p RetryPolicy) delay(attempt int, err error) time.Duration {
+	if apiErr, ok := errors.AsType[*APIError](err); ok && p.RespectRetryAfter {
+		if requested, ok := apiErr.RetryAfter(); ok && requested <= p.MaxRetryAfter {
 			return requested
 		}
 	}

@@ -113,49 +113,62 @@ func TestDelayPrefersRetryAfter(t *testing.T) {
 	policy := DefaultRetryPolicy()
 	policy.rand = func() float64 { return 0 }
 	header := http.Header{}
+	throttled := &APIError{Status: http.StatusTooManyRequests, Header: header}
 	header.Set("Retry-After", "2")
 
-	if got := policy.delay(0, header, time.Now()); got != 2*time.Second {
+	if got := policy.delay(0, throttled); got != 2*time.Second {
 		t.Errorf("delay() = %v, want the 2s the server asked for", got)
 	}
 
 	header.Set("Retry-After", "600")
-	if got := policy.delay(0, header, time.Now()); got != 500*time.Millisecond {
+	if got := policy.delay(0, throttled); got != 500*time.Millisecond {
 		t.Errorf("delay() = %v, want backoff when the server asks for longer than MaxRetryAfter", got)
 	}
 
 	header.Set("Retry-After", "1e20")
-	if got := policy.delay(0, header, time.Now()); got != 500*time.Millisecond {
+	if got := policy.delay(0, throttled); got != 500*time.Millisecond {
 		t.Errorf("delay() = %v, want backoff when the server asks for longer than a Duration holds", got)
+	}
+
+	if got := policy.delay(0, &ConnectionError{}); got != 500*time.Millisecond {
+		t.Errorf("delay() = %v, want backoff after a failure with no response", got)
 	}
 
 	policy.RespectRetryAfter = false
 	header.Set("Retry-After", "2")
-	if got := policy.delay(0, header, time.Now()); got != 500*time.Millisecond {
+	if got := policy.delay(0, throttled); got != 500*time.Millisecond {
 		t.Errorf("delay() = %v, want backoff when RespectRetryAfter is off", got)
 	}
 }
 
-func TestRetriesError(t *testing.T) {
+func TestRetries(t *testing.T) {
 	policy := DefaultRetryPolicy()
 	timeout := error(&TimeoutError{Timeout: time.Second})
 	connection := error(&ConnectionError{Message: "connection error"})
+	unavailable := error(&APIError{Status: http.StatusServiceUnavailable})
+	badRequest := error(&APIError{Status: http.StatusBadRequest})
 
-	for _, err := range []error{timeout, connection} {
-		if !policy.retriesError(err) {
-			t.Errorf("retriesError(%T) = false, want true by default", err)
+	for _, err := range []error{timeout, connection, unavailable} {
+		if !policy.retries(err) {
+			t.Errorf("retries(%v) = false, want true by default", err)
 		}
 	}
-	if policy.retriesError(errors.New("something else")) {
-		t.Error("retriesError(plain error) = true, want false")
+	for _, err := range []error{badRequest, errors.New("something else")} {
+		if policy.retries(err) {
+			t.Errorf("retries(%v) = true, want false by default", err)
+		}
 	}
 
 	policy.RetryTimeoutErrors = false
-	if policy.retriesError(timeout) {
-		t.Error("retriesError(TimeoutError) = true, want false when timeouts are not retried")
+	policy.RetryStatus = func(status int) bool { return status == http.StatusBadRequest }
+	if policy.retries(timeout) {
+		t.Error("retries(TimeoutError) = true, want false when timeouts are not retried")
 	}
-	if !policy.retriesError(connection) {
-		t.Error("retriesError(ConnectionError) = false, want true")
+	if !policy.retries(connection) {
+		t.Error("retries(ConnectionError) = false, want true")
+	}
+	if policy.retries(unavailable) || !policy.retries(badRequest) {
+		t.Error("retries(APIError) ignored RetryStatus")
 	}
 }
 

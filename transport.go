@@ -11,6 +11,14 @@ import (
 	"time"
 )
 
+// request is what every attempt of one call sends.
+type request struct {
+	method, url, tag string
+	header           http.Header
+	body             []byte
+	timeout          time.Duration
+}
+
 func (c *Client) send(ctx context.Context, method, path string, payload any, o *requestOptions) (*response, error) {
 	var body []byte
 	if payload != nil {
@@ -20,81 +28,75 @@ func (c *Client) send(ctx context.Context, method, path string, payload any, o *
 		}
 		body = encoded
 	}
-
-	url := c.baseURL + path
-	endpoint := method + " " + url
-	header := c.requestHeader(o.header, body != nil)
-	tag := fmt.Sprintf("#%d %s %s", c.requests.Add(1), method, path)
+	r := request{
+		method:  method,
+		url:     c.baseURL + path,
+		tag:     fmt.Sprintf("#%d %s %s", c.requests.Add(1), method, path),
+		header:  c.requestHeader(o.header, body != nil),
+		body:    body,
+		timeout: o.timeout,
+	}
 
 	for attempt := 0; ; attempt++ {
-		retriesLeft := o.retry.MaxRetries - attempt
-		attemptHeader := header
-		if attempt > 0 {
-			attemptHeader = header.Clone()
-			attemptHeader.Set(retryCountHeader, strconv.Itoa(attempt))
+		resp, err := c.attempt(ctx, r, attempt)
+		if err == nil {
+			return resp, nil
 		}
-		c.logger.Debug(tag+" request", "url", url, "headers", redactHeader(attemptHeader), "body", string(body))
-
-		started := time.Now()
-		resp, raw, err := c.attempt(ctx, method, url, body, attemptHeader, o.timeout)
-		if err != nil {
-			c.logger.Info(tag+" failed", "after", time.Since(started), "error", err)
-			if retriesLeft <= 0 || !o.retry.retriesError(err) {
-				return nil, err
-			}
-			if err := c.backOff(ctx, tag, attempt, retriesLeft, err.Error(), nil, o.retry); err != nil {
-				return nil, err
-			}
-			continue
+		if attempt >= o.retry.MaxRetries || !o.retry.retries(err) {
+			return nil, err
 		}
-
-		requestID := resp.Header.Get(requestIDHeader)
-		c.logger.Info(tag+" response", "status", resp.StatusCode, "in", time.Since(started), "request_id", requestID)
-		c.logger.Debug(tag+" body", "headers", redactHeader(resp.Header), "body", string(raw))
-
-		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			return &response{http: resp, body: raw, endpoint: endpoint, requestID: requestID, logger: c.logger}, nil
-		}
-
-		apiErr := newAPIError(resp.StatusCode, resp.Header, decodeBody(raw), endpoint)
-		if retriesLeft <= 0 || !o.retry.retriesStatus(resp.StatusCode) {
-			return nil, apiErr
-		}
-		if err := c.backOff(ctx, tag, attempt, retriesLeft, strconv.Itoa(resp.StatusCode), resp.Header, o.retry); err != nil {
+		if err := c.backOff(ctx, r.tag, attempt, err, o.retry); err != nil {
 			return nil, err
 		}
 	}
 }
 
-// attempt performs one round trip, reading the whole body under the per-attempt
+// attempt sends the request once, reading the whole body under the per-attempt
 // timeout so a body that stops arriving is retried like any connection failure.
-func (c *Client) attempt(ctx context.Context, method, url string, body []byte, header http.Header, timeout time.Duration) (*http.Response, []byte, error) {
-	attemptCtx, cancel := context.WithTimeout(ctx, timeout)
+// An unsuccessful status comes back as an *APIError.
+func (c *Client) attempt(ctx context.Context, r request, attempt int) (*response, error) {
+	attemptCtx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
 	var reader io.Reader
-	if body != nil {
-		reader = bytes.NewReader(body)
+	if r.body != nil {
+		reader = bytes.NewReader(r.body)
 	}
-	req, err := http.NewRequestWithContext(attemptCtx, method, url, reader)
+	req, err := http.NewRequestWithContext(attemptCtx, r.method, r.url, reader)
 	if err != nil {
-		return nil, nil, &Error{Message: "the request could not be built", Err: err}
+		return nil, &Error{Message: "the request could not be built", Err: err}
 	}
-	req.Header = header
-	if body != nil {
-		req.ContentLength = int64(len(body))
+	req.Header = r.header
+	if attempt > 0 {
+		req.Header = r.header.Clone()
+		req.Header.Set(retryCountHeader, strconv.Itoa(attempt))
 	}
+	if r.body != nil {
+		req.ContentLength = int64(len(r.body))
+	}
+	c.logger.Debug(r.tag+" request", "url", r.url, "headers", redactHeader(req.Header), "body", string(r.body))
 
+	started := time.Now()
 	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, nil, transportError(ctx, attemptCtx, timeout, err)
+	var raw []byte
+	if err == nil {
+		raw, err = io.ReadAll(resp.Body)
+		resp.Body.Close()
 	}
-	raw, err := io.ReadAll(resp.Body)
-	resp.Body.Close()
 	if err != nil {
-		return nil, nil, transportError(ctx, attemptCtx, timeout, err)
+		err = transportError(ctx, attemptCtx, r.timeout, err)
+		c.logger.Info(r.tag+" failed", "after", time.Since(started), "error", err)
+		return nil, err
 	}
-	return resp, raw, nil
+	requestID := resp.Header.Get(requestIDHeader)
+	c.logger.Info(r.tag+" response", "status", resp.StatusCode, "in", time.Since(started), "request_id", requestID)
+	c.logger.Debug(r.tag+" body", "headers", redactHeader(resp.Header), "body", string(raw))
+
+	endpoint := r.method + " " + r.url
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, newAPIError(resp.StatusCode, resp.Header, decodeBody(raw), endpoint)
+	}
+	return &response{http: resp, body: raw, endpoint: endpoint, requestID: requestID, logger: c.logger}, nil
 }
 
 // transportError tells the three ways an attempt can fail apart: the caller gave
@@ -109,9 +111,9 @@ func transportError(ctx, attemptCtx context.Context, timeout time.Duration, err 
 	return &ConnectionError{Message: "connection error: " + err.Error(), Err: err}
 }
 
-func (c *Client) backOff(ctx context.Context, tag string, attempt, retriesLeft int, reason string, header http.Header, policy RetryPolicy) error {
-	delay := policy.delay(attempt, header, time.Now())
-	c.logger.Info(tag+" retrying", "in", delay, "retry", attempt+1, "of", attempt+retriesLeft, "after", reason)
+func (c *Client) backOff(ctx context.Context, tag string, attempt int, err error, policy RetryPolicy) error {
+	delay := policy.delay(attempt, err)
+	c.logger.Info(tag+" retrying", "in", delay, "retry", attempt+1, "of", policy.MaxRetries, "after", err)
 
 	timer := time.NewTimer(delay)
 	defer timer.Stop()
