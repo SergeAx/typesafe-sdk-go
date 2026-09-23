@@ -335,14 +335,14 @@ func TestModelsList(t *testing.T) {
 			t.Errorf("request = %s %s, want GET %s", r.Method, r.URL.Path, modelsPath)
 		}
 		writeJSON(t, w, http.StatusOK,
-			`{"models":[{"name":"jev-latest","description":"General-purpose system one model.","release_date":"2026-09-15"}]}`)
+			`{"models":[{"name":"jev-latest","description":"General-purpose system one model.","release_date":"2026-09-10T18:38:01.391457+00:00"}]}`)
 	})
 
 	models, err := client.Models.List(t.Context())
 	if err != nil {
 		t.Fatalf("Models.List() error = %v", err)
 	}
-	want := ModelMetadata{Name: "jev-latest", Description: "General-purpose system one model.", ReleaseDate: "2026-09-15"}
+	want := ModelMetadata{Name: "jev-latest", Description: "General-purpose system one model.", ReleaseDate: "2026-09-10T18:38:01.391457+00:00"}
 	if len(models) != 1 || models[0] != want {
 		t.Errorf("Models.List() = %+v, want [%+v]", models, want)
 	}

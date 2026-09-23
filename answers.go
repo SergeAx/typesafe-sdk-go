@@ -108,7 +108,8 @@ func (r *SystemOneResponse) Scores() map[string]*ScoreAnswer {
 type ModelMetadata struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
-	// ReleaseDate is formatted as YYYY-MM-DD.
+	// ReleaseDate is an RFC 3339 timestamp, such as
+	// 2026-09-10T18:38:01.391457+00:00.
 	ReleaseDate string `json:"release_date"`
 }
 
