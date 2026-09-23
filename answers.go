@@ -225,7 +225,7 @@ func (r *response) decodeAnswer(name string, raw json.RawMessage) (Answer, error
 }
 
 func decodeProbabilities[K comparable](raw json.RawMessage, into *map[K]float64) error {
-	if len(raw) == 0 {
+	if len(raw) == 0 || string(raw) == "null" {
 		return newError("field is missing")
 	}
 	return json.Unmarshal(raw, into)

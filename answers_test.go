@@ -160,6 +160,16 @@ func TestDecodeSystemOneRejectsMissingFields(t *testing.T) {
 			wantField: "answers.tone.probabilities",
 		},
 		{
+			name:      "null choice probabilities",
+			body:      `{"model":"jev-1","answers":{"tone":{"type":"choice","choice":"calm","confidence":0.9,"probabilities":null}}}`,
+			wantField: "answers.tone.probabilities",
+		},
+		{
+			name:      "null score probabilities",
+			body:      `{"model":"jev-1","answers":{"u":{"type":"score","score":1,"confidence":0.9,"legend":{},"probabilities":null}}}`,
+			wantField: "answers.u.probabilities",
+		},
+		{
 			name:      "missing score legend",
 			body:      `{"model":"jev-1","answers":{"u":{"type":"score","score":1,"confidence":0.9,"probabilities":{}}}}`,
 			wantField: "answers.u.legend",
