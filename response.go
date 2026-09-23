@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 )
 
 // response is one delivered HTTP response with its body already buffered, so a
@@ -37,7 +38,7 @@ func (r *response) unmarshal(path string, raw []byte, into any) error {
 		return nil
 	}
 	if typeErr, ok := errors.AsType[*json.UnmarshalTypeError](err); ok && typeErr.Field != "" {
-		path += "." + typeErr.Field
+		path = strings.TrimPrefix(path+"."+typeErr.Field, ".")
 	}
 	return r.invalid(path, err)
 }

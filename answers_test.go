@@ -138,6 +138,7 @@ func TestDecodeSystemOneRejectsMissingFields(t *testing.T) {
 		{name: "invalid JSON", body: `not json`, wantField: ""},
 		{name: "missing model", body: `{"answers":{}}`, wantField: "model"},
 		{name: "missing answers", body: `{"model":"jev-1"}`, wantField: "answers"},
+		{name: "mistyped model", body: `{"model":5,"answers":{}}`, wantField: "model"},
 		{
 			name:      "missing answer type",
 			body:      `{"model":"jev-1","answers":{"a":{"noul":0.5}}}`,

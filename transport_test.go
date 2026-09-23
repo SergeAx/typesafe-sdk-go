@@ -362,6 +362,22 @@ func TestModelsListRejectsAnUnexpectedShape(t *testing.T) {
 	}
 }
 
+func TestModelsListNamesAMistypedField(t *testing.T) {
+	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(t, w, http.StatusOK, `{"models":"none"}`)
+	})
+
+	_, err := client.Models.List(t.Context())
+
+	invalid, ok := errors.AsType[*ResponseValidationError](err)
+	if !ok {
+		t.Fatalf("Models.List() error = %v (%T), want *ResponseValidationError", err, err)
+	}
+	if invalid.Field != "models" {
+		t.Errorf("Field = %q, want %q; the body is valid JSON", invalid.Field, "models")
+	}
+}
+
 // stall holds a response open until the client gives up. The bound matters:
 // a handler that only waits on the request context can outlive the client on
 // platforms where the server notices a dropped connection late, and then the

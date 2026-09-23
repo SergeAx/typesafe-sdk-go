@@ -179,8 +179,8 @@ func (w *scoreWire) answer() (Answer, string) {
 
 func (r *response) decodeSystemOne() (*SystemOneResponse, error) {
 	var wire systemOneWire
-	if err := json.Unmarshal(r.body, &wire); err != nil {
-		return nil, r.invalid("", err)
+	if err := r.unmarshal("", r.body, &wire); err != nil {
+		return nil, err
 	}
 	if wire.Model == nil {
 		return nil, r.invalid("model", nil)

@@ -2,7 +2,6 @@ package typesafe
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 )
 
@@ -26,8 +25,8 @@ func (m *Models) List(ctx context.Context, options ...RequestOption) ([]ModelMet
 	var wire struct {
 		Models []ModelMetadata `json:"models"`
 	}
-	if err := json.Unmarshal(resp.body, &wire); err != nil {
-		return nil, resp.invalid("", err)
+	if err := resp.unmarshal("", resp.body, &wire); err != nil {
+		return nil, err
 	}
 	if wire.Models == nil {
 		return nil, resp.invalid("models", nil)
