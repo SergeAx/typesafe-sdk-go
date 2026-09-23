@@ -2,6 +2,7 @@ package typesafe
 
 import (
 	"errors"
+	"math"
 	"net/http"
 	"testing"
 	"time"
@@ -74,6 +75,19 @@ func TestBackoffDoublesAndCaps(t *testing.T) {
 		if got := policy.backoff(attempt); got != expected {
 			t.Errorf("backoff(%d) = %v, want %v", attempt, got, expected)
 		}
+	}
+}
+
+func TestBackoffWithoutCapNeverShrinks(t *testing.T) {
+	policy := RetryPolicy{BackoffInitial: time.Second, BackoffMax: math.MaxInt64, rand: func() float64 { return 0 }}
+
+	previous := time.Duration(0)
+	for attempt := range 100 {
+		got := policy.backoff(attempt)
+		if got < previous {
+			t.Fatalf("backoff(%d) = %v, shorter than backoff(%d) = %v", attempt, got, attempt-1, previous)
+		}
+		previous = got
 	}
 }
 

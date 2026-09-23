@@ -129,17 +129,19 @@ func (p RetryPolicy) backoff(attempt int) time.Duration {
 	if p.BackoffInitial <= 0 || p.BackoffMax <= 0 {
 		return 0
 	}
+	// Neither step can overflow: the shift is checked against BackoffMax before
+	// it is taken, and the jitter is subtracted instead of scaling a float that
+	// rounds up past math.MaxInt64 when BackoffMax is near it.
 	exponential := p.BackoffMax
-	if attempt < 62 {
-		if scaled := p.BackoffInitial << uint(attempt); scaled > 0 && scaled < p.BackoffMax {
-			exponential = scaled
-		}
+	if p.BackoffInitial <= p.BackoffMax>>attempt {
+		exponential = p.BackoffInitial << attempt
 	}
 	random := rand.Float64
 	if p.rand != nil {
 		random = p.rand
 	}
-	return time.Duration(float64(exponential) * (1 - random()*p.BackoffJitter))
+	jitter := time.Duration(float64(exponential) * random() * p.BackoffJitter)
+	return exponential - min(jitter, exponential)
 }
 
 // parseRetryAfter reads retry-after-ms, then Retry-After as either seconds or an
