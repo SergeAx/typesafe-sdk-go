@@ -15,6 +15,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"maps"
 	"math"
@@ -52,7 +53,7 @@ func loadDotenv(path string) {
 func liveClient(t *testing.T, options ...typesafe.ClientOption) *typesafe.Client {
 	t.Helper()
 	if strings.TrimSpace(os.Getenv(typesafe.APIKeyEnv)) == "" {
-		t.Skipf("%s is set neither in the environment nor in .env", typesafe.APIKeyEnv)
+		skip(t, typesafe.APIKeyEnv+" is set neither in the environment nor in .env")
 	}
 	client, err := typesafe.New(options...)
 	if err != nil {
@@ -75,8 +76,21 @@ func unpaid(status int, message string) bool {
 func skipIfUnpaid(t *testing.T, err error) {
 	t.Helper()
 	if apiErr, ok := errors.AsType[*typesafe.APIError](err); ok && unpaid(apiErr.Status, apiErr.Message) {
-		t.Skipf("the account cannot pay for requests: %v", err)
+		skip(t, fmt.Sprintf("the account cannot pay for requests: %d %s", apiErr.Status, apiErr.Message))
 	}
+}
+
+var warned = map[string]bool{}
+
+// skip skips the test and, on GitHub Actions, raises each distinct reason as a
+// warning once, so a run that never reached the API does not pass unnoticed.
+func skip(t *testing.T, reason string) {
+	t.Helper()
+	if os.Getenv("GITHUB_ACTIONS") == "true" && !warned[reason] {
+		warned[reason] = true
+		fmt.Printf("::warning title=Live API tests skipped::%s\n", reason)
+	}
+	t.Skip(reason)
 }
 
 func TestLiveModelsList(t *testing.T) {
@@ -211,7 +225,7 @@ func postQuestion(t *testing.T, question typesafe.Question) (int, string) {
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
 	if unpaid(resp.StatusCode, string(body)) {
-		t.Skipf("the account cannot pay for requests: %s", body)
+		skip(t, fmt.Sprintf("the account cannot pay for requests: %d %s", resp.StatusCode, body))
 	}
 	return resp.StatusCode, string(body)
 }

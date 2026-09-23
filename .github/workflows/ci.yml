@@ -43,3 +43,17 @@ jobs:
       - uses: golangci/golangci-lint-action@v9
         with:
           version: v2.13.2
+
+  integration:
+    # The live suite spends credit, so only what lands on master pays for it.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs: [test, lint]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+      - run: go test -tags integration -count=1 -run Live -v ./...
+        env:
+          TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
