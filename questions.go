@@ -17,7 +17,8 @@ type Question interface {
 type Questions map[string]Question
 
 // Validate reports the problems the API would reject: no questions at all, a
-// score question without a rubric, or a raw question without a type.
+// choice question without labels, a score question without a rubric, or a raw
+// question without a type.
 func (q Questions) Validate() error {
 	if len(q) == 0 {
 		return newError("at least one question is required")
@@ -94,7 +95,12 @@ func (q Choice) MarshalJSON() ([]byte, error) {
 	return json.Marshal(payload)
 }
 
-func (q Choice) validate(string) error { return nil }
+func (q Choice) validate(name string) error {
+	if len(q.Criteria) == 0 {
+		return newError("choice question %q has no criteria; at least one label is required", name)
+	}
+	return nil
+}
 
 // Score is a question that rates the state against an ordered rubric, scoring
 // each criterion by its position from zero.
