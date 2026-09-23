@@ -39,6 +39,13 @@ func TestParseRetryAfter(t *testing.T) {
 			wantOK: true,
 		},
 		{name: "negative seconds", header: map[string]string{"Retry-After": "-5"}, wantOK: false},
+		{name: "seconds beyond a Duration", header: map[string]string{"Retry-After": "1e20"}, wantOK: false},
+		{
+			name:   "milliseconds beyond a Duration fall back",
+			header: map[string]string{"Retry-After-Ms": "1e300", "Retry-After": "3"},
+			want:   3 * time.Second,
+			wantOK: true,
+		},
 		{name: "unparseable", header: map[string]string{"Retry-After": "soon"}, wantOK: false},
 		{name: "empty", header: map[string]string{"Retry-After": ""}, wantOK: false},
 	}
@@ -101,6 +108,11 @@ func TestDelayPrefersRetryAfter(t *testing.T) {
 	header.Set("Retry-After", "600")
 	if got := policy.delay(0, header, time.Now()); got != 500*time.Millisecond {
 		t.Errorf("delay() = %v, want backoff when the server asks for longer than MaxRetryAfter", got)
+	}
+
+	header.Set("Retry-After", "1e20")
+	if got := policy.delay(0, header, time.Now()); got != 500*time.Millisecond {
+		t.Errorf("delay() = %v, want backoff when the server asks for longer than a Duration holds", got)
 	}
 
 	policy.RespectRetryAfter = false

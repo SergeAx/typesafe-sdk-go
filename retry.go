@@ -146,8 +146,10 @@ func (p RetryPolicy) backoff(attempt int) time.Duration {
 // HTTP date.
 func parseRetryAfter(header http.Header, now time.Time) (time.Duration, bool) {
 	if raw := strings.TrimSpace(header.Get("Retry-After-Ms")); raw != "" {
-		if ms, err := strconv.ParseFloat(raw, 64); err == nil && ms >= 0 && !math.IsInf(ms, 0) {
-			return time.Duration(ms * float64(time.Millisecond)), true
+		if ms, err := strconv.ParseFloat(raw, 64); err == nil {
+			if delay, ok := durationOf(ms, time.Millisecond); ok {
+				return delay, true
+			}
 		}
 	}
 	raw := strings.TrimSpace(header.Get("Retry-After"))
@@ -155,13 +157,21 @@ func parseRetryAfter(header http.Header, now time.Time) (time.Duration, bool) {
 		return 0, false
 	}
 	if seconds, err := strconv.ParseFloat(raw, 64); err == nil {
-		if seconds < 0 || math.IsInf(seconds, 0) || math.IsNaN(seconds) {
-			return 0, false
-		}
-		return time.Duration(seconds * float64(time.Second)), true
+		return durationOf(seconds, time.Second)
 	}
 	if at, err := http.ParseTime(raw); err == nil {
 		return max(0, at.Sub(now)), true
 	}
 	return 0, false
+}
+
+// durationOf rejects a count of units that is negative, NaN, or too long for a
+// Duration: Go leaves an out-of-range float conversion to the platform, and on
+// amd64 it comes out negative.
+func durationOf(count float64, unit time.Duration) (time.Duration, bool) {
+	ns := count * float64(unit)
+	if !(ns >= 0 && ns < math.MaxInt64) {
+		return 0, false
+	}
+	return time.Duration(ns), true
 }
