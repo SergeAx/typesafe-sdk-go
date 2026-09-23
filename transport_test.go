@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -399,4 +401,64 @@ func equalStrings(got, want []string) bool {
 		}
 	}
 	return true
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func FuzzSendRetries(f *testing.F) {
+	f.Add(uint8(2), []byte{3, 3, 0})
+	f.Add(uint8(2), []byte{3, 3, 3, 0})
+	f.Add(uint8(0), []byte{2})
+	f.Add(uint8(5), []byte{4, 5, 2, 1, 0})
+	f.Fuzz(func(t *testing.T, maxRetries uint8, script []byte) {
+		// Each byte scripts one attempt: 200, 400, or one of the retryable 429,
+		// 503, dropped connection, and timeout. Attempts past the script succeed.
+		outcome := func(attempt int) byte {
+			if attempt < len(script) {
+				return script[attempt] % 6
+			}
+			return 0
+		}
+		policy := RetryPolicy{MaxRetries: int(maxRetries % 8), RetryConnectionErrors: true, RetryTimeoutErrors: true}
+
+		attempts := 0
+		transport := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			want := ""
+			if attempts > 0 {
+				want = strconv.Itoa(attempts)
+			}
+			if got := r.Header.Get(retryCountHeader); got != want {
+				t.Errorf("attempt %d sent %s %q, want %q", attempts, retryCountHeader, got, want)
+			}
+			attempts++
+			switch outcome(attempts - 1) {
+			case 4:
+				return nil, errors.New("connection reset")
+			case 5:
+				return nil, context.DeadlineExceeded
+			}
+			status := [...]int{http.StatusOK, http.StatusBadRequest, http.StatusTooManyRequests, http.StatusServiceUnavailable}[outcome(attempts-1)]
+			return &http.Response{StatusCode: status, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"models":[]}`))}, nil
+		})
+		client, err := New(WithAPIKey("test-key"), WithBaseURL("http://api.test"), WithRetry(policy),
+			WithHTTPClient(&http.Client{Transport: transport}), WithLogger(slog.New(slog.DiscardHandler)))
+		if err != nil {
+			t.Fatalf("New() error = %v", err)
+		}
+
+		_, err = client.Models.List(t.Context())
+
+		want := 1
+		for outcome(want-1) >= 2 && want <= policy.MaxRetries {
+			want++
+		}
+		if attempts != want {
+			t.Errorf("attempts = %d, want %d for script %v and MaxRetries %d", attempts, want, script, policy.MaxRetries)
+		}
+		if succeeded := outcome(attempts-1) == 0; (err == nil) != succeeded {
+			t.Errorf("Models.List() error = %v after attempt outcome %d", err, outcome(attempts-1))
+		}
+	})
 }

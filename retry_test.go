@@ -212,3 +212,52 @@ func TestRetryPolicyValidate(t *testing.T) {
 		})
 	}
 }
+
+func FuzzBackoff(f *testing.F) {
+	f.Add(int64(500*time.Millisecond), int64(5*time.Second), uint8(0), 0.25, 0.5)
+	f.Add(int64(time.Second), int64(math.MaxInt64), uint8(36), 0.0, 0.0)
+	f.Add(int64(1), int64(math.MaxInt64), uint8(62), 1.0, 0.999)
+	f.Add(int64(3*time.Second), int64(time.Second), uint8(70), 0.5, 0.25)
+	f.Fuzz(func(t *testing.T, initial, maximum int64, attempt uint8, jitter, random float64) {
+		if initial < 0 || maximum < 0 || !(jitter >= 0 && jitter <= 1) || !(random >= 0 && random < 1) {
+			t.Skip()
+		}
+		policy := RetryPolicy{
+			BackoffInitial: time.Duration(initial),
+			BackoffMax:     time.Duration(maximum),
+			BackoffJitter:  jitter,
+			rand:           func() float64 { return random },
+		}
+
+		if got := policy.backoff(int(attempt)); got < 0 || got > policy.BackoffMax {
+			t.Fatalf("backoff(%d) = %d, want within [0, %d]", attempt, got, maximum)
+		}
+		policy.BackoffJitter = 0
+		if got, next := policy.backoff(int(attempt)), policy.backoff(int(attempt)+1); got > next {
+			t.Fatalf("backoff shrank from %d at attempt %d to %d at the next", got, attempt, next)
+		}
+		if first, want := policy.backoff(0), min(policy.BackoffInitial, policy.BackoffMax); initial > 0 && first != want {
+			t.Fatalf("backoff(0) = %d, want the smaller of BackoffInitial and BackoffMax, %d", first, want)
+		}
+	})
+}
+
+func FuzzDelay(f *testing.F) {
+	f.Add("", "2")
+	f.Add("1e300", "3")
+	f.Add("", "1e20")
+	f.Add("-5", "NaN")
+	f.Add("250", "Thu, 17 Sep 2026 12:00:20 GMT")
+	f.Fuzz(func(t *testing.T, milliseconds, retryAfter string) {
+		policy := DefaultRetryPolicy()
+		header := http.Header{}
+		header.Set("Retry-After-Ms", milliseconds)
+		header.Set("Retry-After", retryAfter)
+
+		limit := max(policy.MaxRetryAfter, policy.BackoffMax)
+		if got := policy.delay(0, &APIError{Status: http.StatusTooManyRequests, Header: header}); got < 0 || got > limit {
+			t.Fatalf("delay() = %v for retry-after-ms %q and Retry-After %q, want within [0, %v]",
+				got, milliseconds, retryAfter, limit)
+		}
+	})
+}

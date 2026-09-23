@@ -100,3 +100,18 @@ func TestDefaultLoggerReadsTheEnvironment(t *testing.T) {
 		t.Error("defaultLogger() still logged with TYPESAFE_LOG_LEVEL=off")
 	}
 }
+
+func FuzzRedactAuthorization(f *testing.F) {
+	f.Add("test-key")
+	f.Add("sk-live-0123456789abcdef")
+	f.Add("  a key with spaces  ")
+	f.Fuzz(func(t *testing.T, key string) {
+		got := redactHeader(http.Header{"Authorization": {"Bearer " + key}})["Authorization"]
+
+		secret := strings.TrimSpace(key)
+		tail, ok := strings.CutPrefix(got, "Bearer ***")
+		if !ok || len(tail) > 4 || !strings.HasSuffix(secret, tail) || (len(secret) <= 8 && tail != "") {
+			t.Fatalf("redacted %q to %q, want \"Bearer ***\" and at most the last 4 bytes of a secret longer than 8", key, got)
+		}
+	})
+}

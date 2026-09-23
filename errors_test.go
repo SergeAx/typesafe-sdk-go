@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func TestAPIErrorCategories(t *testing.T) {
@@ -152,4 +153,30 @@ func TestErrorUnwraps(t *testing.T) {
 	if err.Error() != want {
 		t.Errorf("Error() = %q, want %q", err.Error(), want)
 	}
+}
+
+func FuzzTruncate(f *testing.F) {
+	f.Add("short")
+	f.Add(strings.Repeat("é", maxErrorBodyLength+50))
+	f.Add(strings.Repeat("x", maxErrorBodyLength-1) + "日本")
+	f.Add(strings.Repeat("\xff", maxErrorBodyLength+1))
+	f.Fuzz(func(t *testing.T, text string) {
+		got := truncate(text)
+
+		if n := utf8.RuneCountInString(got); n > maxErrorBodyLength+1 {
+			t.Fatalf("truncate() kept %d runes, want at most %d", n, maxErrorBodyLength+1)
+		}
+		if !utf8.ValidString(text) {
+			return
+		}
+		kept, cut := strings.CutSuffix(got, "…")
+		switch {
+		case utf8.RuneCountInString(text) <= maxErrorBodyLength:
+			if got != text {
+				t.Fatalf("truncate() changed a text short enough to keep: %q", got)
+			}
+		case !cut || !strings.HasPrefix(text, kept) || utf8.RuneCountInString(kept) != maxErrorBodyLength:
+			t.Fatalf("truncate() = %q, want the first %d runes and an ellipsis", got, maxErrorBodyLength)
+		}
+	})
 }
