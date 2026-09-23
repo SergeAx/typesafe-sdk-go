@@ -1,6 +1,9 @@
 package typesafe
 
-import "encoding/json"
+import (
+	"cmp"
+	"encoding/json"
+)
 
 // Content is the JSON a question, a criterion, or the request state carries:
 // a string, a map[string]any, a []any, or nil for an undescribed value.
@@ -9,8 +12,13 @@ type Content = any
 // Question is one of [Noul], [Choice], [Score], or [RawQuestion].
 type Question interface {
 	json.Marshaler
-	validate(name string) error
+	question()
 }
+
+func (Noul) question()        {}
+func (Choice) question()      {}
+func (Score) question()       {}
+func (RawQuestion) question() {}
 
 // Questions are the questions of a request, keyed by the names their answers
 // come back under.
@@ -27,9 +35,43 @@ func (q Questions) Validate() error {
 		if question == nil {
 			return newError("question %q is nil", name)
 		}
-		if err := question.validate(name); err != nil {
+		if err := validateQuestion(name, question); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// validateQuestion judges a question by the JSON the API receives, so typed and
+// raw questions meet the same rules, and a json.RawMessage or custom marshaler
+// in a raw one counts like a map or a slice. An encoding failure is left to the
+// request, which reports its cause.
+func validateQuestion(name string, question Question) error {
+	encoded, err := encodeJSON(question)
+	if err != nil {
+		return nil
+	}
+	var wire struct {
+		Type     string          `json:"type"`
+		Criteria json.RawMessage `json:"criteria"`
+	}
+	if json.Unmarshal(encoded, &wire) != nil || wire.Type == "" {
+		return newError("question %q needs a nonempty string %q field", name, "type")
+	}
+
+	var empty, want string
+	switch wire.Type {
+	case "choice":
+		empty, want = "{}", "an object of at least one label"
+	case "score":
+		empty, want = "[]", "a list of at least one level"
+	default:
+		return nil
+	}
+	criteria := string(wire.Criteria)
+	if criteria == "" || criteria[0] != empty[0] || criteria == empty {
+		return newError("%s question %q needs criteria as %s, got %s",
+			wire.Type, name, want, truncate(cmp.Or(criteria, "nothing")))
 	}
 	return nil
 }
@@ -71,8 +113,6 @@ func (c NoulCriteria) MarshalJSON() ([]byte, error) {
 	return json.Marshal(payload)
 }
 
-func (q Noul) validate(string) error { return nil }
-
 // Choice is a question that selects one of the labels in its criteria.
 // See https://docs.typesafe.ai/primitives/choice.
 type Choice struct {
@@ -93,13 +133,6 @@ func (q Choice) MarshalJSON() ([]byte, error) {
 		payload["instructions"] = q.Instructions
 	}
 	return json.Marshal(payload)
-}
-
-func (q Choice) validate(name string) error {
-	if len(q.Criteria) == 0 {
-		return newError("choice question %q has no criteria; at least one label is required", name)
-	}
-	return nil
 }
 
 // Score is a question that rates the state against an ordered rubric, scoring
@@ -124,42 +157,10 @@ func (q Score) MarshalJSON() ([]byte, error) {
 	return json.Marshal(payload)
 }
 
-func (q Score) validate(name string) error {
-	if len(q.Criteria) == 0 {
-		return newError("score question %q has no criteria; at least one score level is required", name)
-	}
-	return nil
-}
-
 // RawQuestion sends a question payload verbatim, for question types this SDK
 // version does not model. It must carry a nonempty "type".
 type RawQuestion map[string]any
 
 func (q RawQuestion) MarshalJSON() ([]byte, error) {
 	return json.Marshal(map[string]any(q))
-}
-
-func (q RawQuestion) validate(name string) error {
-	kind, ok := q["type"].(string)
-	if !ok || kind == "" {
-		return newError("raw question %q needs a nonempty string %q field", name, "type")
-	}
-	var empty, container string
-	switch kind {
-	case "choice":
-		empty, container = "{}", "object"
-	case "score":
-		empty, container = "[]", "array"
-	default:
-		return nil
-	}
-	// Judged by the JSON the API receives, so a json.RawMessage or a custom
-	// marshaler counts like a map or a slice. An encoding failure is left to
-	// the request, which reports its cause.
-	encoded, err := encodeJSON(q["criteria"])
-	if err == nil && (encoded[0] != empty[0] || string(encoded) == empty) {
-		return newError("raw question %q of type %q needs %q as a nonempty JSON %s, got %s",
-			name, kind, "criteria", container, truncate(string(encoded)))
-	}
-	return nil
 }
