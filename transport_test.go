@@ -119,7 +119,7 @@ func TestSystemOneModelAndExtraBodyOverrides(t *testing.T) {
 		writeJSON(t, w, http.StatusOK, `{"model":"jev-1","usage":{},"answers":{"a":{"type":"noul","noul":0.1}}}`)
 	})
 
-	_, err := client.SystemOne(t.Context(), "state", Questions{"a": Noul{}},
+	_, err := client.SystemOne(t.Context(), "state", Questions{"a": Noul{Instructions: "Is it?"}},
 		WithModel("jev-mini"),
 		WithExtraBody(map[string]any{"trace_id": "t-1", "state": "replaced"}),
 	)
@@ -165,7 +165,7 @@ func TestSystemOneRetriesServerErrors(t *testing.T) {
 		writeJSON(t, w, http.StatusOK, `{"model":"jev-1","usage":{},"answers":{"a":{"type":"noul","noul":0.4}}}`)
 	})
 
-	result, err := client.SystemOne(t.Context(), "state", Questions{"a": Noul{}})
+	result, err := client.SystemOne(t.Context(), "state", Questions{"a": Noul{Instructions: "Is it?"}})
 	if err != nil {
 		t.Fatalf("SystemOne() error = %v", err)
 	}
@@ -187,7 +187,7 @@ func TestSystemOneReturnsTheLastErrorWhenRetriesRunOut(t *testing.T) {
 		writeJSON(t, w, http.StatusServiceUnavailable, `{"error":"still down"}`)
 	})
 
-	_, err := client.SystemOne(t.Context(), "state", Questions{"a": Noul{}})
+	_, err := client.SystemOne(t.Context(), "state", Questions{"a": Noul{Instructions: "Is it?"}})
 
 	apiErr, ok := errors.AsType[*APIError](err)
 	if !ok {
@@ -211,7 +211,7 @@ func TestSystemOneDoesNotRetryClientErrors(t *testing.T) {
 		writeJSON(t, w, http.StatusUnauthorized, `{"error":"Invalid API key"}`)
 	})
 
-	_, err := client.SystemOne(t.Context(), "state", Questions{"a": Noul{}})
+	_, err := client.SystemOne(t.Context(), "state", Questions{"a": Noul{Instructions: "Is it?"}})
 
 	if !errors.Is(err, ErrAuthentication) {
 		t.Fatalf("SystemOne() error = %v, want an authentication failure", err)
@@ -233,7 +233,7 @@ func TestSystemOneHonorsRetryAfter(t *testing.T) {
 	})
 
 	started := time.Now()
-	if _, err := client.SystemOne(t.Context(), "state", Questions{"a": Noul{}}); err != nil {
+	if _, err := client.SystemOne(t.Context(), "state", Questions{"a": Noul{Instructions: "Is it?"}}); err != nil {
 		t.Fatalf("SystemOne() error = %v", err)
 	}
 
@@ -261,7 +261,7 @@ func TestSystemOneRetriesConnectionErrors(t *testing.T) {
 		writeJSON(t, w, http.StatusOK, `{"model":"jev-1","usage":{},"answers":{"a":{"type":"noul","noul":0.4}}}`)
 	})
 
-	if _, err := client.SystemOne(t.Context(), "state", Questions{"a": Noul{}}); err != nil {
+	if _, err := client.SystemOne(t.Context(), "state", Questions{"a": Noul{Instructions: "Is it?"}}); err != nil {
 		t.Fatalf("SystemOne() error = %v, want the dropped connection to be retried", err)
 	}
 	if got := attempts.Load(); got != 2 {
@@ -274,7 +274,7 @@ func TestSystemOneTimesOutPerAttempt(t *testing.T) {
 		stall(r)
 	}, WithTimeout(30*time.Millisecond), WithRetry(RetryPolicy{}))
 
-	_, err := client.SystemOne(t.Context(), "state", Questions{"a": Noul{}})
+	_, err := client.SystemOne(t.Context(), "state", Questions{"a": Noul{Instructions: "Is it?"}})
 
 	timeout, ok := errors.AsType[*TimeoutError](err)
 	if !ok {
@@ -299,7 +299,7 @@ func TestSystemOneStopsWhenTheContextIsCanceled(t *testing.T) {
 		cancel()
 	}()
 
-	_, err := client.SystemOne(ctx, "state", Questions{"a": Noul{}})
+	_, err := client.SystemOne(ctx, "state", Questions{"a": Noul{Instructions: "Is it?"}})
 
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("SystemOne() error = %v, want it to match context.Canceled", err)
@@ -318,7 +318,7 @@ func TestSystemOneReportsNonJSONErrorBodies(t *testing.T) {
 		}
 	}, WithRetry(RetryPolicy{}))
 
-	_, err := client.SystemOne(t.Context(), "state", Questions{"a": Noul{}})
+	_, err := client.SystemOne(t.Context(), "state", Questions{"a": Noul{Instructions: "Is it?"}})
 
 	apiErr, ok := errors.AsType[*APIError](err)
 	if !ok {

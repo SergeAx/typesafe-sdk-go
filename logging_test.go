@@ -66,7 +66,7 @@ func TestDebugLoggingRedactsCredentials(t *testing.T) {
 		writeJSON(t, w, http.StatusOK, `{"model":"jev-1","usage":{},"answers":{"a":{"type":"noul","noul":0.4}}}`)
 	}, WithLogger(logger))
 
-	if _, err := client.SystemOne(t.Context(), "state", Questions{"a": Noul{}}); err != nil {
+	if _, err := client.SystemOne(t.Context(), "state", Questions{"a": Noul{Instructions: "Is it?"}}); err != nil {
 		t.Fatalf("SystemOne() error = %v", err)
 	}
 

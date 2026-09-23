@@ -25,8 +25,8 @@ func (RawQuestion) question() {}
 type Questions map[string]Question
 
 // Validate reports the problems the API would reject: no questions at all, a
-// choice question without labels or a score question without a rubric, typed
-// or raw, or a raw question without a type.
+// question without a type, a noul with neither instructions nor criteria, a
+// choice without labels, or a score without a rubric.
 func (q Questions) Validate() error {
 	if len(q) == 0 {
 		return newError("at least one question is required")
@@ -52,32 +52,49 @@ func validateQuestion(name string, question Question) error {
 		return nil
 	}
 	var wire struct {
-		Type     string          `json:"type"`
-		Criteria json.RawMessage `json:"criteria"`
+		Type         string          `json:"type"`
+		Instructions json.RawMessage `json:"instructions"`
+		Criteria     json.RawMessage `json:"criteria"`
 	}
 	if json.Unmarshal(encoded, &wire) != nil || wire.Type == "" {
 		return newError("question %q needs a nonempty string %q field", name, "type")
 	}
 
-	var empty, want string
+	var open byte
+	var want string
 	switch wire.Type {
+	case "noul":
+		if blank(wire.Instructions) && blank(wire.Criteria) {
+			return newError("noul question %q needs instructions or criteria", name)
+		}
+		return nil
 	case "choice":
-		empty, want = "{}", "an object of at least one label"
+		open, want = '{', "an object of at least one label"
 	case "score":
-		empty, want = "[]", "a list of at least one level"
+		open, want = '[', "a list of at least one level"
 	default:
 		return nil
 	}
-	criteria := string(wire.Criteria)
-	if criteria == "" || criteria[0] != empty[0] || criteria == empty {
+	if blank(wire.Criteria) || wire.Criteria[0] != open {
 		return newError("%s question %q needs criteria as %s, got %s",
-			wire.Type, name, want, truncate(cmp.Or(criteria, "nothing")))
+			wire.Type, name, want, truncate(cmp.Or(string(wire.Criteria), "nothing")))
 	}
 	return nil
 }
 
+// blank reports whether a JSON value carries nothing: it is absent, null, or an
+// empty string, object, or list.
+func blank(raw json.RawMessage) bool {
+	switch string(raw) {
+	case "", "null", `""`, "{}", "[]":
+		return true
+	}
+	return false
+}
+
 // Noul is a yes/no question or statement, answered with the probability that
-// the answer is yes. See https://docs.typesafe.ai/primitives/noul.
+// the answer is yes. It needs instructions, criteria, or both.
+// See https://docs.typesafe.ai/primitives/noul.
 type Noul struct {
 	// Instructions is the question or statement to evaluate.
 	Instructions Content

@@ -95,7 +95,11 @@ func TestQuestionsValidate(t *testing.T) {
 		{name: "nil is rejected", questions: nil, wantErr: true},
 		{name: "empty is rejected", questions: Questions{}, wantErr: true},
 		{name: "nil question is rejected", questions: Questions{"a": nil}, wantErr: true},
-		{name: "noul needs nothing", questions: Questions{"a": Noul{}}, wantErr: false},
+		{name: "noul without instructions or criteria is rejected", questions: Questions{"a": Noul{}}, wantErr: true},
+		{name: "noul with empty instructions is rejected", questions: Questions{"a": Noul{Instructions: ""}}, wantErr: true},
+		{name: "noul with empty criteria is rejected", questions: Questions{"a": Noul{Criteria: &NoulCriteria{}}}, wantErr: true},
+		{name: "noul with instructions is accepted", questions: Questions{"a": Noul{Instructions: "Is it?"}}, wantErr: false},
+		{name: "noul with one criterion is accepted", questions: Questions{"a": Noul{Criteria: &NoulCriteria{True: "About billing"}}}, wantErr: false},
 		{name: "choice without criteria is rejected", questions: Questions{"a": Choice{}}, wantErr: true},
 		{name: "choice with empty criteria is rejected", questions: Questions{"a": Choice{Criteria: map[string]Content{}}}, wantErr: true},
 		{name: "choice with one label is accepted", questions: Questions{"a": Choice{Criteria: map[string]Content{"billing": nil}}}, wantErr: false},
@@ -111,7 +115,8 @@ func TestQuestionsValidate(t *testing.T) {
 		{name: "raw choice with empty criteria is rejected", questions: Questions{"a": RawQuestion{"type": "choice", "criteria": map[string]Content{}}}, wantErr: true},
 		{name: "raw choice with list criteria is rejected", questions: Questions{"a": RawQuestion{"type": "choice", "criteria": []string{"billing"}}}, wantErr: true},
 		{name: "raw choice with one label is accepted", questions: Questions{"a": RawQuestion{"type": "choice", "criteria": map[string]string{"billing": ""}}}, wantErr: false},
-		{name: "raw noul is accepted", questions: Questions{"a": RawQuestion{"type": "noul"}}, wantErr: false},
+		{name: "raw noul without instructions is rejected", questions: Questions{"a": RawQuestion{"type": "noul"}}, wantErr: true},
+		{name: "raw noul is accepted", questions: Questions{"a": RawQuestion{"type": "noul", "instructions": "Is it?"}}, wantErr: false},
 	}
 
 	for _, test := range tests {

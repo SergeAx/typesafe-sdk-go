@@ -71,7 +71,7 @@ func ExampleAPIError() {
 		log.Fatal(err)
 	}
 
-	_, err = client.SystemOne(context.Background(), "state", typesafe.Questions{"a": typesafe.Noul{}})
+	_, err = client.SystemOne(context.Background(), "state", typesafe.Questions{"a": typesafe.Noul{Instructions: "Is this about billing?"}})
 
 	switch {
 	case err == nil:
