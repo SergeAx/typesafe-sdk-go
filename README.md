@@ -4,7 +4,7 @@ Go SDK for [TypeSafe AI](https://typesafe.ai).
 
 ## Quickstart
 
-Install the SDK (Go 1.23 or newer):
+Install the SDK (Go 1.26 or newer):
 
 ```sh
 go get serge.ax/go/typesafe-sdk-go
