@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"log/slog"
+	"maps"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -215,9 +216,7 @@ func (c *Client) SystemOne(ctx context.Context, state Content, questions Questio
 
 	model := cmp.Or(resolved.model, c.defaultModel)
 	body := map[string]any{"state": state, "model": model, "questions": questions}
-	for name, value := range resolved.extraBody {
-		body[name] = value
-	}
+	maps.Copy(body, resolved.extraBody)
 
 	resp, err := c.send(ctx, http.MethodPost, systemOnePath, body, resolved)
 	if err != nil {
@@ -230,12 +229,7 @@ func (c *Client) SystemOne(ctx context.Context, state Content, questions Questio
 // can never clobber authentication or the JSON content type.
 func (c *Client) requestHeader(extra http.Header, hasBody bool) http.Header {
 	header := c.header.Clone()
-	if header == nil {
-		header = http.Header{}
-	}
-	for name, values := range extra {
-		header[http.CanonicalHeaderKey(name)] = append([]string(nil), values...)
-	}
+	maps.Copy(header, extra)
 	header.Del(retryCountHeader)
 	header.Set("Authorization", "Bearer "+c.apiKey)
 	header.Set("Accept", jsonContentType)
