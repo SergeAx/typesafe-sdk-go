@@ -104,6 +104,13 @@ func TestQuestionsValidate(t *testing.T) {
 		{name: "raw question without a type is rejected", questions: Questions{"a": RawQuestion{}}, wantErr: true},
 		{name: "raw question with an empty type is rejected", questions: Questions{"a": RawQuestion{"type": ""}}, wantErr: true},
 		{name: "raw score without criteria is rejected", questions: Questions{"a": RawQuestion{"type": "score"}}, wantErr: true},
+		{name: "raw score with empty criteria is rejected", questions: Questions{"a": RawQuestion{"type": "score", "criteria": []Content{}}}, wantErr: true},
+		{name: "raw score with empty raw JSON criteria is rejected", questions: Questions{"a": RawQuestion{"type": "score", "criteria": json.RawMessage(`[ ]`)}}, wantErr: true},
+		{name: "raw score with one level is accepted", questions: Questions{"a": RawQuestion{"type": "score", "criteria": []string{"Can wait"}}}, wantErr: false},
+		{name: "raw choice with null criteria is rejected", questions: Questions{"a": RawQuestion{"type": "choice", "criteria": nil}}, wantErr: true},
+		{name: "raw choice with empty criteria is rejected", questions: Questions{"a": RawQuestion{"type": "choice", "criteria": map[string]Content{}}}, wantErr: true},
+		{name: "raw choice with list criteria is rejected", questions: Questions{"a": RawQuestion{"type": "choice", "criteria": []string{"billing"}}}, wantErr: true},
+		{name: "raw choice with one label is accepted", questions: Questions{"a": RawQuestion{"type": "choice", "criteria": map[string]string{"billing": ""}}}, wantErr: false},
 		{name: "raw noul is accepted", questions: Questions{"a": RawQuestion{"type": "noul"}}, wantErr: false},
 	}
 

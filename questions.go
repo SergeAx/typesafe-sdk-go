@@ -17,8 +17,8 @@ type Question interface {
 type Questions map[string]Question
 
 // Validate reports the problems the API would reject: no questions at all, a
-// choice question without labels, a score question without a rubric, or a raw
-// question without a type.
+// choice question without labels or a score question without a rubric, typed
+// or raw, or a raw question without a type.
 func (q Questions) Validate() error {
 	if len(q) == 0 {
 		return newError("at least one question is required")
@@ -144,10 +144,22 @@ func (q RawQuestion) validate(name string) error {
 	if !ok || kind == "" {
 		return newError("raw question %q needs a nonempty string %q field", name, "type")
 	}
-	if kind == "choice" || kind == "score" {
-		if _, ok := q["criteria"]; !ok {
-			return newError("raw question %q of type %q requires %q", name, kind, "criteria")
-		}
+	var empty, container string
+	switch kind {
+	case "choice":
+		empty, container = "{}", "object"
+	case "score":
+		empty, container = "[]", "array"
+	default:
+		return nil
+	}
+	// Judged by the JSON the API receives, so a json.RawMessage or a custom
+	// marshaler counts like a map or a slice. An encoding failure is left to
+	// the request, which reports its cause.
+	encoded, err := encodeJSON(q["criteria"])
+	if err == nil && (encoded[0] != empty[0] || string(encoded) == empty) {
+		return newError("raw question %q of type %q needs %q as a nonempty JSON %s, got %s",
+			name, kind, "criteria", container, truncate(string(encoded)))
 	}
 	return nil
 }
